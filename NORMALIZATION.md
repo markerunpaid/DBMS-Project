@@ -30,3 +30,25 @@ each holds one indivisible value; no table stores a list/CSV in a single column.
 Every table declares a single-column or minimal composite `PRIMARY KEY`.
 
 ✅ **All tables in `schema.sql` satisfy 1NF.**
+
+---
+
+## 2NF — Second Normal Form
+
+**Requirement:** table is in 1NF, and every non-key attribute is fully
+functionally dependent on the *whole* primary key (no attribute depends on only
+part of a composite key). Tables with a single-column PK automatically satisfy 2NF,
+so only the composite-PK (junction / weak-entity) tables need checking:
+
+| Table | Composite PK | Non-key attributes | Do they depend on the *whole* key? |
+|---|---|---|---|
+| `customer_address` | (customer_id, address_id) | label, is_default | Yes — `label`/`is_default` describe how *this customer* tags *this specific saved address*; neither is fixed by customer_id or address_id alone |
+| `dark_store_category` | (dark_store_id, category_id) | *(none)* | trivially satisfied |
+| `operating_hours` | (dark_store_id, day_of_week) | opens_at, closes_at | Yes — hours are specific to *that store on that day*; two stores differ, and one store's Monday differs from its Sunday |
+| `inventory` | (dark_store_id, product_id) | quantity, updated_at | Yes — stock level is a fact of *that product in that store*, not the product globally or the store in general |
+| `customer_coupon` | (customer_id, coupon_id) | redeemed_at | Yes — redemption date is specific to *this customer redeeming this coupon* |
+| `order_product` | (order_id, product_id) | quantity, price_at_order | Yes — `price_at_order` deliberately freezes the product's price *at the time of that order* (prices change over time), so it cannot be derived from product_id alone |
+
+No partial dependency was found in any composite-key table.
+
+✅ **All tables satisfy 2NF.**

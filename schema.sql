@@ -43,6 +43,8 @@ CREATE TABLE customer (
 ) ENGINE = InnoDB;
 
 -- Customer <-> Address  (M:N — a customer can save many addresses)
+-- 2NF: label/is_default depend on the full (customer_id, address_id) pair, not
+-- on either column alone — no partial dependency.
 CREATE TABLE customer_address (
     customer_id  BIGINT UNSIGNED NOT NULL,
     address_id   BIGINT UNSIGNED NOT NULL,
@@ -124,6 +126,8 @@ ALTER TABLE dark_store
 -- 1NF: the ER design had operating_hours as a single multi-valued attribute on
 -- Dark_Store (different hours per day can't fit atomically in one column) —
 -- pulled out into its own table, one row per store per day.
+-- 2NF: opens_at/closes_at depend on the full (dark_store_id, day_of_week) pair
+-- — a store's hours differ by day, so neither column alone determines them.
 CREATE TABLE operating_hours (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     day_of_week   ENUM('MON','TUE','WED','THU','FRI','SAT','SUN') NOT NULL,
@@ -155,6 +159,8 @@ CREATE TABLE dark_store_category (
 -- =============================================================================
 -- 5. INVENTORY  (Dark Store <-> Product, with stock level)
 -- =============================================================================
+-- 2NF: quantity/updated_at depend on the full (dark_store_id, product_id) pair
+-- — stock level is per-product-per-store, not a fact of the product or store alone.
 CREATE TABLE inventory (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     product_id    BIGINT UNSIGNED NOT NULL,
@@ -213,6 +219,8 @@ CREATE TABLE coupon (
 -- relationship (a coupon can be owned by many customers) — same fix as
 -- dark_store_category above.
 -- Customer <-> Coupon  (coupons available / redeemed by a customer)
+-- 2NF: redeemed_at depends on the full (customer_id, coupon_id) pair — it's
+-- when *this customer* redeemed *this coupon*.
 CREATE TABLE customer_coupon (
     customer_id BIGINT UNSIGNED NOT NULL,
     coupon_id   BIGINT UNSIGNED NOT NULL,
@@ -265,6 +273,9 @@ CREATE TABLE orders (
 ) ENGINE = InnoDB;
 
 -- Order line items  (Order <-> Product, M:N)
+-- 2NF: quantity/price_at_order depend on the full (order_id, product_id) pair —
+-- price_at_order in particular freezes the product's price at purchase time,
+-- so it can't be derived from product_id alone (prices change later).
 CREATE TABLE order_product (
     order_id       BIGINT UNSIGNED NOT NULL,
     product_id     BIGINT UNSIGNED NOT NULL,
