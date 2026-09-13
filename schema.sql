@@ -12,21 +12,37 @@ USE quick_commerce;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- =============================================================================
--- 1. ADDRESS
+-- 1. PINCODE
+-- =============================================================================
+-- 3NF: city was a column on address, but pin_code -> city holds as a real-world
+-- FD (a PIN code identifies one fixed locality), so city was only transitively
+-- dependent on address_id via pin_code. Extracted here so city/state are stored
+-- once per pin code instead of once per address.
+CREATE TABLE pincode (
+    pin_code CHAR(6)     NOT NULL,
+    city     VARCHAR(80) NOT NULL,
+    state    VARCHAR(80) NOT NULL,
+    PRIMARY KEY (pin_code)
+) ENGINE = InnoDB;
+
+-- =============================================================================
+-- 2. ADDRESS
 -- =============================================================================
 CREATE TABLE address (
     address_id   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     house_no     VARCHAR(30),
     street       VARCHAR(150),
-    city         VARCHAR(80)      NOT NULL,
     pin_code     CHAR(6)          NOT NULL,
     created_at   TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (address_id),
+    CONSTRAINT fk_address_pincode
+        FOREIGN KEY (pin_code) REFERENCES pincode (pin_code)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_address_pin (pin_code)
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 2. CUSTOMER
+-- 3. CUSTOMER
 -- =============================================================================
 CREATE TABLE customer (
     customer_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -60,7 +76,7 @@ CREATE TABLE customer_address (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 3. CATEGORY  /  PRODUCT
+-- 4. CATEGORY  /  PRODUCT
 -- =============================================================================
 CREATE TABLE category (
     category_id  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -87,7 +103,7 @@ CREATE TABLE product (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 4. DARK STORE  /  EMPLOYEE  /  OPERATING HOURS
+-- 5. DARK STORE  /  EMPLOYEE  /  OPERATING HOURS
 -- =============================================================================
 CREATE TABLE dark_store (
     dark_store_id       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -157,7 +173,7 @@ CREATE TABLE dark_store_category (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 5. INVENTORY  (Dark Store <-> Product, with stock level)
+-- 6. INVENTORY  (Dark Store <-> Product, with stock level)
 -- =============================================================================
 -- 2NF: quantity/updated_at depend on the full (dark_store_id, product_id) pair
 -- — stock level is per-product-per-store, not a fact of the product or store alone.
@@ -179,7 +195,7 @@ CREATE TABLE inventory (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 6. DELIVERY PARTNER
+-- 7. DELIVERY PARTNER
 -- =============================================================================
 CREATE TABLE delivery_partner (
     partner_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -200,7 +216,7 @@ CREATE TABLE delivery_partner (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 7. COUPON
+-- 8. COUPON
 -- =============================================================================
 CREATE TABLE coupon (
     coupon_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -235,7 +251,7 @@ CREATE TABLE customer_coupon (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 8. ORDER  (`orders` — "order" is a reserved word)
+-- 9. ORDER  (`orders` — "order" is a reserved word)
 -- =============================================================================
 CREATE TABLE orders (
     order_id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -294,7 +310,7 @@ CREATE TABLE order_product (
 ) ENGINE = InnoDB;
 
 -- =============================================================================
--- 9. PAYMENT RECORD  (1:1 with order)
+-- 10. PAYMENT RECORD  (1:1 with order)
 -- =============================================================================
 CREATE TABLE payment_record (
     payment_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

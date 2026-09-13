@@ -52,3 +52,74 @@ so only the composite-PK (junction / weak-entity) tables need checking:
 No partial dependency was found in any composite-key table.
 
 ✅ **All tables satisfy 2NF.**
+
+---
+
+## 3NF — Third Normal Form
+
+**Requirement:** table is in 2NF, and no non-key attribute is transitively
+dependent on the primary key through another non-key attribute (i.e. no non-key
+attribute determines another non-key attribute).
+
+### Violation found
+
+`address(address_id, house_no, street, city, pin_code)`
+
+```
+address_id → pin_code → city
+```
+
+A PIN code identifies a fixed post office / locality, so `pin_code → city` holds
+as a real-world functional dependency. That makes `city` depend on `address_id`
+**only transitively**, through the non-key attribute `pin_code` — a textbook 3NF
+violation. Symptoms if left as-is:
+
+- **Update anomaly** — correcting a city's name requires updating every address
+  row that happens to share that pin code.
+- **Insertion anomaly** — a pin code's city can't be recorded without also
+  creating a full address row.
+- **Deletion anomaly** — deleting the last address using a pin code silently
+  loses the pin code → city fact.
+
+### Fix applied
+
+Extracted the transitively-dependent attributes into their own table, keyed on
+the determinant (`pin_code`):
+
+```sql
+CREATE TABLE pincode (
+    pin_code CHAR(6)     NOT NULL,
+    city     VARCHAR(80) NOT NULL,
+    state    VARCHAR(80) NOT NULL,
+    PRIMARY KEY (pin_code)
+);
+
+-- address now stores only facts that depend on address_id directly
+CREATE TABLE address (
+    address_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    house_no   VARCHAR(30),
+    street     VARCHAR(150),
+    pin_code   CHAR(6) NOT NULL,   -- FK -> pincode(pin_code)
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (address_id)
+);
+```
+
+`city`/`state` are now stored exactly once per pin code and reached via a join —
+the transitive dependency is gone.
+
+### Remaining tables re-checked for transitive dependencies
+
+- `orders → customer_id, dark_store_id, delivery_partner_id, coupon_id, delivery_address_id, amount, status, date_time`
+  — every one of these is an independent *fact about that order* (who placed it,
+  which store fulfills it, which address it ships to). Note `delivery_address_id`
+  is deliberately kept on `orders` itself rather than assumed from the customer's
+  default address, since a customer can ship different orders to different saved
+  addresses — that is not a transitive dependency, it's a direct fact of the order.
+- `dark_store → name, address_id, manager_employee_id` — independent facts; no
+  attribute determines another.
+- `product`, `employee`, `delivery_partner`, `payment_record`, `coupon`,
+  `customer` — every non-key column was checked against every other non-key
+  column in the same row; each is an independent, directly-owned fact.
+
+✅ **All tables now satisfy 3NF.**
