@@ -1,5 +1,6 @@
 -- =============================================================================
 -- Quick-Commerce / Dark-Store Delivery Platform
+-- Normalized to 3NF — see NORMALIZATION.md for the full FD-by-FD proof.
 -- =============================================================================
 
 DROP DATABASE IF EXISTS quick_commerce;
@@ -120,6 +121,9 @@ ALTER TABLE dark_store
         FOREIGN KEY (manager_employee_id) REFERENCES employee (employee_id)
         ON DELETE SET NULL ON UPDATE CASCADE;
 
+-- 1NF: the ER design had operating_hours as a single multi-valued attribute on
+-- Dark_Store (different hours per day can't fit atomically in one column) —
+-- pulled out into its own table, one row per store per day.
 CREATE TABLE operating_hours (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     day_of_week   ENUM('MON','TUE','WED','THU','FRI','SAT','SUN') NOT NULL,
@@ -131,6 +135,10 @@ CREATE TABLE operating_hours (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB;
 
+-- 1NF: the ER design put dark_store_id directly on Category for what is an
+-- M:N relationship (a category can be stocked by many stores) — a single FK
+-- can't represent that without repeating whole category rows, so it's a
+-- junction table instead.
 -- Dark Store <-> Category  (which categories a store stocks)
 CREATE TABLE dark_store_category (
     dark_store_id BIGINT UNSIGNED NOT NULL,
@@ -201,6 +209,9 @@ CREATE TABLE coupon (
     CONSTRAINT chk_coupon_window CHECK (valid_to > valid_from)
 ) ENGINE = InnoDB;
 
+-- 1NF: the ER design put customer_id directly on Coupons for what is an M:N
+-- relationship (a coupon can be owned by many customers) — same fix as
+-- dark_store_category above.
 -- Customer <-> Coupon  (coupons available / redeemed by a customer)
 CREATE TABLE customer_coupon (
     customer_id BIGINT UNSIGNED NOT NULL,
