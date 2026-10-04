@@ -1,23 +1,12 @@
--- =============================================================================
--- Quick-Commerce / Dark-Store Delivery Platform
--- Normalized to 3NF — see NORMALIZATION.md for the full FD-by-FD proof.
--- =============================================================================
-
 DROP DATABASE IF EXISTS quick_commerce;
 CREATE DATABASE quick_commerce
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_0900_ai_ci;
 USE quick_commerce;
 
+-- turn of the RIC checks
 SET FOREIGN_KEY_CHECKS = 0;
 
--- =============================================================================
--- 1. PINCODE
--- =============================================================================
--- 3NF: city was a column on address, but pin_code -> city holds as a real-world
--- FD (a PIN code identifies one fixed locality), so city was only transitively
--- dependent on address_id via pin_code. Extracted here so city/state are stored
--- once per pin code instead of once per address.
 CREATE TABLE pincode (
     pin_code CHAR(6)     NOT NULL,
     city     VARCHAR(80) NOT NULL,
@@ -25,25 +14,27 @@ CREATE TABLE pincode (
     PRIMARY KEY (pin_code)
 ) ENGINE = InnoDB;
 
--- =============================================================================
--- 2. ADDRESS
--- =============================================================================
 CREATE TABLE address (
     address_id   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     house_no     VARCHAR(30),
     street       VARCHAR(150),
     pin_code     CHAR(6)          NOT NULL,
+    latitude     DECIMAL(9,6)     NOT NULL,
+    longitude    DECIMAL(9,6)     NOT NULL,
     created_at   TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (address_id),
     CONSTRAINT fk_address_pincode
         FOREIGN KEY (pin_code) REFERENCES pincode (pin_code)
         ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT chk_address_lat CHECK (latitude  BETWEEN -90  AND 90),
+    CONSTRAINT chk_address_lng CHECK (longitude BETWEEN -180 AND 180),
     INDEX idx_address_pin (pin_code)
 ) ENGINE = InnoDB;
+-- 3NF suggested pincode should be handled separately
+-- latitude/longitude locate this exact house (not the whole pin code area), so they
+-- depend on address_id directly -- used to find the nearest dark store
 
--- =============================================================================
--- 3. CUSTOMER
--- =============================================================================
+
 CREATE TABLE customer (
     customer_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     first_name      VARCHAR(60)     NOT NULL,
@@ -57,10 +48,11 @@ CREATE TABLE customer (
     UNIQUE KEY uq_customer_phone (phone),
     UNIQUE KEY uq_customer_email (email)
 ) ENGINE = InnoDB;
+-- only one instance of  phone number and email can be present in databse
+-- 1NF suggested that instead of having name as composite create first name ,lastname and middle name..
+-- passwords are not stored raw thier hashes are!!
+-- phone number may have +91 or wihout +91 thus wiht Varchar(15) however this opens cases of regiseting with p and +91p
 
--- Customer <-> Address  (M:N — a customer can save many addresses)
--- 2NF: label/is_default depend on the full (customer_id, address_id) pair, not
--- on either column alone — no partial dependency.
 CREATE TABLE customer_address (
     customer_id  BIGINT UNSIGNED NOT NULL,
     address_id   BIGINT UNSIGNED NOT NULL,
@@ -74,16 +66,20 @@ CREATE TABLE customer_address (
         FOREIGN KEY (address_id) REFERENCES address (address_id)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB;
+-- customer to adresses was M:N so we created a speerate table for them
+-- the attributes have carefully be chosen keeping 2NF in mind
+-- makes sense to have delete on cascade
 
--- =============================================================================
--- 4. CATEGORY  /  PRODUCT
--- =============================================================================
+
+
 CREATE TABLE category (
     category_id  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name         VARCHAR(80)     NOT NULL,
     PRIMARY KEY (category_id),
     UNIQUE KEY uq_category_name (name)
 ) ENGINE = InnoDB;
+
+
 
 CREATE TABLE product (
     product_id   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -101,10 +97,11 @@ CREATE TABLE product (
     INDEX idx_product_category (category_id),
     INDEX idx_product_name (name)
 ) ENGINE = InnoDB;
+-- customary constraint of price
+-- delete restrict makes sense!!
 
--- =============================================================================
--- 5. DARK STORE  /  EMPLOYEE  /  OPERATING HOURS
--- =============================================================================
+
+
 CREATE TABLE dark_store (
     dark_store_id       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name                VARCHAR(120)    NOT NULL,
@@ -118,32 +115,38 @@ CREATE TABLE dark_store (
     INDEX idx_darkstore_address (address_id)
 ) ENGINE = InnoDB;
 
+
+
 CREATE TABLE employee (
     employee_id   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     first_name    VARCHAR(60)     NOT NULL,
     middle_name   VARCHAR(60),
     last_name     VARCHAR(60),
     phone         VARCHAR(15)     NOT NULL,
+    email         VARCHAR(120),                          -- only set for employees who log in
+    password_hash VARCHAR(255),
     dark_store_id BIGINT UNSIGNED NOT NULL,              -- store the employee works at
     created_at    TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (employee_id),
     UNIQUE KEY uq_employee_phone (phone),
+    UNIQUE KEY uq_employee_email (email),
     CONSTRAINT fk_employee_darkstore
         FOREIGN KEY (dark_store_id) REFERENCES dark_store (dark_store_id)
         ON DELETE RESTRICT ON UPDATE CASCADE,
     INDEX idx_employee_darkstore (dark_store_id)
 ) ENGINE = InnoDB;
+-- an employee who manages at least one dark store logs in as ADMIN
+-- email is nullable because floor staff don't need a login; UNIQUE still allows many NULLs
+
+
 
 ALTER TABLE dark_store
     ADD CONSTRAINT fk_darkstore_manager
         FOREIGN KEY (manager_employee_id) REFERENCES employee (employee_id)
         ON DELETE SET NULL ON UPDATE CASCADE;
 
--- 1NF: the ER design had operating_hours as a single multi-valued attribute on
--- Dark_Store (different hours per day can't fit atomically in one column) —
--- pulled out into its own table, one row per store per day.
--- 2NF: opens_at/closes_at depend on the full (dark_store_id, day_of_week) pair
--- — a store's hours differ by day, so neither column alone determines them.
+
+
 CREATE TABLE operating_hours (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     day_of_week   ENUM('MON','TUE','WED','THU','FRI','SAT','SUN') NOT NULL,
@@ -154,12 +157,16 @@ CREATE TABLE operating_hours (
         FOREIGN KEY (dark_store_id) REFERENCES dark_store (dark_store_id)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB;
+-- 1NF: the ER design had operating_hours as a single multi-valued attribute on
+-- Dark_Store (different hours per day can't fit atomically in one column) —
+-- pulled out into its own table, one row per store per day.
+-- 2NF: opens_at/closes_at depend on the full (dark_store_id, day_of_week) pair
+-- — a store's hours differ by day, so neither column alone determines them.
 
--- 1NF: the ER design put dark_store_id directly on Category for what is an
--- M:N relationship (a category can be stocked by many stores) — a single FK
--- can't represent that without repeating whole category rows, so it's a
--- junction table instead.
--- Dark Store <-> Category  (which categories a store stocks)
+
+
+
+-- M:N relationship
 CREATE TABLE dark_store_category (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     category_id   BIGINT UNSIGNED NOT NULL,
@@ -172,11 +179,6 @@ CREATE TABLE dark_store_category (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB;
 
--- =============================================================================
--- 6. INVENTORY  (Dark Store <-> Product, with stock level)
--- =============================================================================
--- 2NF: quantity/updated_at depend on the full (dark_store_id, product_id) pair
--- — stock level is per-product-per-store, not a fact of the product or store alone.
 CREATE TABLE inventory (
     dark_store_id BIGINT UNSIGNED NOT NULL,
     product_id    BIGINT UNSIGNED NOT NULL,
@@ -193,31 +195,39 @@ CREATE TABLE inventory (
     CONSTRAINT chk_inventory_qty CHECK (quantity >= 0),
     INDEX idx_inventory_product (product_id)
 ) ENGINE = InnoDB;
+-- 2NF: quantity/updated_at depend on the full (dark_store_id, product_id) pair
+-- — stock level is per-product-per-store, not a fact of the product or store alone.
 
--- =============================================================================
--- 7. DELIVERY PARTNER
--- =============================================================================
+
+
+
 CREATE TABLE delivery_partner (
     partner_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     first_name     VARCHAR(60)     NOT NULL,
     middle_name    VARCHAR(60),
     last_name      VARCHAR(60),
     phone          VARCHAR(15)     NOT NULL,
+    email          VARCHAR(120)    NOT NULL,
+    password_hash  VARCHAR(255)    NOT NULL,
     vehicle_number VARCHAR(20),
     status         ENUM('AVAILABLE','BUSY','OFFLINE') NOT NULL DEFAULT 'OFFLINE',
     dark_store_id  BIGINT UNSIGNED,                 -- home store the partner is attached to
     created_at     TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (partner_id),
     UNIQUE KEY uq_partner_phone (phone),
+    UNIQUE KEY uq_partner_email (email),
     CONSTRAINT fk_partner_darkstore
         FOREIGN KEY (dark_store_id) REFERENCES dark_store (dark_store_id)
         ON DELETE SET NULL ON UPDATE CASCADE,
     INDEX idx_partner_status (status)
 ) ENGINE = InnoDB;
+-- deivery partner may choose no vehicales thus not not null
+-- On delete we set NULL thus if a dark store is deleted the partrner is explicity assigned null to show he is unassigned
+-- every partner logs in to see their deliveries, so email/password_hash are NOT NULL
 
--- =============================================================================
--- 8. COUPON
--- =============================================================================
+
+
+
 CREATE TABLE coupon (
     coupon_id     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     code          VARCHAR(30)     NOT NULL,
@@ -231,12 +241,6 @@ CREATE TABLE coupon (
     CONSTRAINT chk_coupon_window CHECK (valid_to > valid_from)
 ) ENGINE = InnoDB;
 
--- 1NF: the ER design put customer_id directly on Coupons for what is an M:N
--- relationship (a coupon can be owned by many customers) — same fix as
--- dark_store_category above.
--- Customer <-> Coupon  (coupons available / redeemed by a customer)
--- 2NF: redeemed_at depends on the full (customer_id, coupon_id) pair — it's
--- when *this customer* redeemed *this coupon*.
 CREATE TABLE customer_coupon (
     customer_id BIGINT UNSIGNED NOT NULL,
     coupon_id   BIGINT UNSIGNED NOT NULL,
@@ -249,10 +253,9 @@ CREATE TABLE customer_coupon (
         FOREIGN KEY (coupon_id) REFERENCES coupon (coupon_id)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB;
+-- 2NF: redeemed_at depends on the full (customer_id, coupon_id) pair
 
--- =============================================================================
--- 9. ORDER  (`orders` — "order" is a reserved word)
--- =============================================================================
+-- ORDERS(`orders`AS "order" is a reserved word)
 CREATE TABLE orders (
     order_id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     customer_id       BIGINT UNSIGNED NOT NULL,
@@ -263,7 +266,6 @@ CREATE TABLE orders (
     amount            DECIMAL(10,2)   NOT NULL,       -- final payable amount
     status            ENUM('PLACED','PACKED','OUT_FOR_DELIVERY','DELIVERED','CANCELLED')
                                       NOT NULL DEFAULT 'PLACED',
-    date_time         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (order_id),
     CONSTRAINT fk_order_customer
         FOREIGN KEY (customer_id) REFERENCES customer (customer_id)
@@ -284,14 +286,35 @@ CREATE TABLE orders (
     INDEX idx_order_customer (customer_id),
     INDEX idx_order_darkstore (dark_store_id),
     INDEX idx_order_partner (delivery_partner_id),
-    INDEX idx_order_status (status),
-    INDEX idx_order_datetime (date_time)
+    INDEX idx_order_status (status)
 ) ENGINE = InnoDB;
+-- ORDER is an importatant entity in the databse and is thus dealt carefully
+-- it makes sense that as long as any orders are associated with a customer/address dont allow deleting them..it may cause losses
+-- it makes sense if a delivery apretner is delted then this order is explicty shown that is unattended
+-- the old date_time column was removed: it recorded the same fact as order_timer.placed_at
+
+-- ORDER TIMER  (weak entity, 1:1 identifying relationship "Tracked By" with orders)
+CREATE TABLE order_timer (
+    order_id             BIGINT UNSIGNED NOT NULL,
+    placed_at            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expected_delivery_at DATETIME        NOT NULL,
+    out_for_delivery_at  DATETIME,
+    received_at          DATETIME,
+    cancelled_at         DATETIME,
+    PRIMARY KEY (order_id),
+    CONSTRAINT fk_timer_order
+        FOREIGN KEY (order_id) REFERENCES orders (order_id)
+        ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT chk_timer_expected  CHECK (expected_delivery_at > placed_at),
+    CONSTRAINT chk_timer_final     CHECK (received_at IS NULL OR cancelled_at IS NULL),
+    INDEX idx_timer_placed (placed_at)
+) ENGINE = InnoDB;
+-- the timer cannot exist without its order, so its PK is the order's PK (weak entity)
+-- a milestone column stays NULL until the order reaches it
+-- an order is either received or cancelled, never both
+-- 3NF: every timestamp is a direct fact of order_id; none determines another
 
 -- Order line items  (Order <-> Product, M:N)
--- 2NF: quantity/price_at_order depend on the full (order_id, product_id) pair —
--- price_at_order in particular freezes the product's price at purchase time,
--- so it can't be derived from product_id alone (prices change later).
 CREATE TABLE order_product (
     order_id       BIGINT UNSIGNED NOT NULL,
     product_id     BIGINT UNSIGNED NOT NULL,
@@ -308,10 +331,10 @@ CREATE TABLE order_product (
     CONSTRAINT chk_orderproduct_price CHECK (price_at_order >= 0),
     INDEX idx_orderproduct_product (product_id)
 ) ENGINE = InnoDB;
+-- 2NF: quantity/price_at_order depend on the full (order_id, product_id) pair
 
--- =============================================================================
--- 10. PAYMENT RECORD  (1:1 with order)
--- =============================================================================
+
+
 CREATE TABLE payment_record (
     payment_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     order_id   BIGINT UNSIGNED NOT NULL,
@@ -327,4 +350,61 @@ CREATE TABLE payment_record (
     CONSTRAINT chk_payment_amount CHECK (amount >= 0)
 ) ENGINE = InnoDB;
 
+
+-- turn back and check for referntial intigrity constratits..
 SET FOREIGN_KEY_CHECKS = 1;
+
+
+-- =============================================================================
+-- VIEWS -- read-only joins used to demo the order pipeline in one query each.
+-- A view stores no data (it is re-computed from the base tables on every read),
+-- so it adds no redundancy and doesn't affect normalization.
+-- =============================================================================
+
+-- one row per order: who ordered, which store, which partner, money, payment, and the timer
+CREATE OR REPLACE VIEW v_order_details AS
+SELECT o.order_id,
+       o.status,
+       CONCAT_WS(' ', c.first_name, c.middle_name, c.last_name)    AS customer_name,
+       c.phone                                                     AS customer_phone,
+       ds.name                                                     AS store_name,
+       CONCAT_WS(' ', dp.first_name, dp.middle_name, dp.last_name) AS partner_name,
+       dp.status                                                   AS partner_status,
+       CONCAT_WS(', ', a.house_no, a.street, pc.city, pc.pin_code) AS deliver_to,
+       (SELECT SUM(op.quantity * op.price_at_order)
+          FROM order_product op WHERE op.order_id = o.order_id)    AS subtotal,
+       cp.code                                                     AS coupon_code,
+       o.amount                                                    AS amount_paid,
+       pr.mode                                                     AS payment_mode,
+       pr.status                                                   AS payment_status,
+       t.placed_at,
+       t.expected_delivery_at,
+       t.out_for_delivery_at,
+       t.received_at,
+       t.cancelled_at,
+       TIMESTAMPDIFF(MINUTE, t.placed_at, t.received_at)           AS minutes_to_deliver
+  FROM orders o
+  JOIN customer c          ON c.customer_id    = o.customer_id
+  JOIN dark_store ds       ON ds.dark_store_id = o.dark_store_id
+  JOIN address a           ON a.address_id     = o.delivery_address_id
+  JOIN pincode pc          ON pc.pin_code      = a.pin_code
+  LEFT JOIN delivery_partner dp ON dp.partner_id = o.delivery_partner_id
+  LEFT JOIN coupon cp           ON cp.coupon_id  = o.coupon_id
+  LEFT JOIN order_timer t       ON t.order_id    = o.order_id
+  LEFT JOIN payment_record pr   ON pr.order_id   = o.order_id;
+
+-- current stock of every product in every dark store
+CREATE OR REPLACE VIEW v_store_inventory AS
+SELECT ds.dark_store_id,
+       ds.name       AS store_name,
+       cat.name      AS category,
+       p.product_id,
+       p.name        AS product,
+       p.unit,
+       p.price,
+       i.quantity    AS in_stock,
+       i.updated_at
+  FROM inventory i
+  JOIN dark_store ds ON ds.dark_store_id = i.dark_store_id
+  JOIN product p     ON p.product_id     = i.product_id
+  JOIN category cat  ON cat.category_id  = p.category_id;

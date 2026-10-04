@@ -110,7 +110,7 @@ the transitive dependency is gone.
 
 ### Remaining tables re-checked for transitive dependencies
 
-- `orders → customer_id, dark_store_id, delivery_partner_id, coupon_id, delivery_address_id, amount, status, date_time`
+- `orders → customer_id, dark_store_id, delivery_partner_id, coupon_id, delivery_address_id, amount, status`
   — every one of these is an independent *fact about that order* (who placed it,
   which store fulfills it, which address it ships to). Note `delivery_address_id`
   is deliberately kept on `orders` itself rather than assumed from the customer's
@@ -123,3 +123,44 @@ the transitive dependency is gone.
   column in the same row; each is an independent, directly-owned fact.
 
 ✅ **All tables now satisfy 3NF.**
+
+---
+
+## Additions for the application (Order Timer, location, logins)
+
+The app layer needed a few schema additions. Each one was checked against 1NF–3NF
+before it went in.
+
+### New weak entity `order_timer`
+
+```
+order_timer(order_id PK/FK → orders, placed_at, expected_delivery_at,
+            out_for_delivery_at, received_at, cancelled_at)
+```
+
+- **ER:** a weak entity *Order_Timer* joined to *Order* by the 1:1 identifying
+  relationship *Tracked By*. It cannot exist without its order, so its key is the
+  order's key, and `ON DELETE CASCADE` removes it with the order.
+- **1NF:** each column holds a single timestamp. A milestone the order hasn't
+  reached yet is `NULL`, not a list or a placeholder.
+- **2NF:** the PK is the single column `order_id`, so there are no partial
+  dependencies.
+- **3NF:** `order_id → placed_at, expected_delivery_at, out_for_delivery_at,
+  received_at, cancelled_at`. No timestamp determines another. `expected_delivery_at`
+  is computed by the application from store distance, and is stored because it is
+  the promise made to the customer at that moment. `placed_at` alone cannot
+  reproduce it.
+- **Redundancy removed:** `orders.date_time` recorded the same fact as
+  `order_timer.placed_at`, so it was dropped. Keeping both would let the two
+  disagree (an update anomaly).
+- **Integrity:** `CHECK (expected_delivery_at > placed_at)` and
+  `CHECK (received_at IS NULL OR cancelled_at IS NULL)`, so an order is never both
+  delivered and cancelled.
+
+### Other column additions
+
+| Table | New columns | Why it stays in 3NF |
+|---|---|---|
+| `address` | `latitude`, `longitude` | They locate *this* house, not the pin-code area, so they depend on `address_id` directly. Several houses share a pin code but not coordinates, so there's no `pin_code → latitude`. |
+| `employee` | `email` (UNIQUE, nullable), `password_hash` | Login credentials of that employee: `employee_id → email, password_hash`. `email` is a candidate key, and a non-key attribute depending on a candidate key is allowed. |
+| `delivery_partner` | `email` (UNIQUE), `password_hash` | Same reasoning as `employee`. |
