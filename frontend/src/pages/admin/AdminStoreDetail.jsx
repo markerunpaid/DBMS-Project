@@ -6,6 +6,7 @@ import OrderTimer from '../../components/OrderTimer.jsx'
 import StatusBadge from '../../components/StatusBadge.jsx'
 import { dateTime, money } from '../../utils/format.js'
 import { useApi } from '../../utils/useApi.js'
+import { productPhoto } from '../customer/StoreItems.jsx'
 
 function StockRow({ storeId, item, onSaved, onRemoved }) {
   const [qty, setQty] = useState(item.quantity)
@@ -36,7 +37,7 @@ function StockRow({ storeId, item, onSaved, onRemoved }) {
 
   return (
     <tr className={item.quantity === 0 ? 'row-warn' : ''}>
-      <td><strong>{item.name}</strong> <span className="muted small">{item.unit}</span></td>
+      <td><div className="stock-product"><div className="stock-thumb">{productPhoto(item.name) && <img src={productPhoto(item.name)} alt="" loading="lazy" />}</div><div><strong>{item.name}</strong><br /><span className="muted small">{item.unit}</span></div></div></td>
       <td>{item.categoryName}</td>
       <td className="num">{money(item.price)}</td>
       <td>
@@ -305,8 +306,14 @@ export default function AdminStoreDetail() {
   return (
     <div>
       <Link to="/admin" className="muted small">← All my stores</Link>
-      <h1>{store?.name || 'Store'}</h1>
-      {store && <p className="muted">{store.address}</p>}
+      <section className="store-admin-banner">
+        <div><span className="eyebrow">STORE CONTROL CENTER</span><h1>{store?.name || 'Store'}</h1>
+          {store && <p>{store.address}</p>}
+        </div>
+        {store && <div className="store-admin-stats"><span className={`badge ${store.openNow ? 'badge-open' : 'badge-cancelled'}`}>{store.openNow ? 'Open now' : 'Closed'}</span>
+          <div><strong>{store.productCount}</strong><small>products</small></div><div><strong>{store.activeOrders}</strong><small>active orders</small></div>
+        </div>}
+      </section>
       <div className="tabs">
         <button className={tab === 'items' ? 'tab active' : 'tab'} onClick={() => setTab('items')}>Items</button>
         <button className={tab === 'orders' ? 'tab active' : 'tab'} onClick={() => setTab('orders')}>

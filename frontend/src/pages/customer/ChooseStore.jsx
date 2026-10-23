@@ -51,8 +51,18 @@ export default function ChooseStore() {
 
   return (
     <div>
+      <section className="shop-hero">
+        <div className="shop-hero-copy">
+          <span className="eyebrow">GOOD THINGS, RIGHT ON TIME</span>
+          <h1>Your everyday picks,<br />at your doorstep.</h1>
+          <p>Fresh finds from a nearby store, delivered when you need them.</p>
+          <div className="hero-perks"><span>✦ Fast local delivery</span><span>✦ Carefully picked</span></div>
+        </div>
+        <div className="shop-hero-image" role="img" aria-label="Fresh groceries ready for delivery" />
+        <span className="hero-sticker">Good food<br /><strong>good mood</strong> ✿</span>
+      </section>
       <div className="row-between">
-        <h1>Choose a store</h1>
+        <div><span className="eyebrow">YOUR NEIGHBORHOOD</span><h1>Choose a store</h1></div>
         <div className="row-gap">
           <label className="inline">
             Deliver to{' '}
@@ -98,7 +108,8 @@ export default function ChooseStore() {
               onClick={() => shopAt(s)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); shopAt(s) } }}
             >
-              <div>
+              <div className={`store-photo store-photo-${i % 3}`} aria-hidden="true"><span>{['🥬', '🍊', '🥖'][i % 3]}</span></div>
+              <div className="store-info">
                 <div className="row-gap">
                   <h3>{s.name}</h3>
                   {i === 0 && canOrder && <span className="badge badge-delivered">Nearest</span>}

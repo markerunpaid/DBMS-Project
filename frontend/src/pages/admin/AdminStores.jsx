@@ -6,11 +6,22 @@ const hhmm = (t) => t?.slice(0, 5)
 
 export default function AdminStores() {
   const { data: stores, error, loading } = useApi('/admin/stores', { pollMs: 5000 })
+  const activeOrders = stores?.reduce((sum, store) => sum + store.activeOrders, 0) || 0
+  const stockAlerts = stores?.reduce((sum, store) => sum + store.outOfStockCount, 0) || 0
 
   return (
     <div>
-      <h1>My dark stores</h1>
-      <p className="muted">Stores where you are the manager. Open one to see its items and orders.</p>
+      <section className="ops-hero manager-hero">
+        <div><span className="eyebrow">QUICKCART OPERATIONS</span><h1>Your stores, at a glance.</h1>
+          <p>Keep shelves ready and orders moving across your stores.</p></div>
+        <div className="ops-hero-icon" aria-hidden="true">⌂</div>
+      </section>
+      <div className="ops-metrics">
+        <div className="ops-metric"><span>My stores</span><strong>{stores?.length ?? '—'}</strong><small>Locations you manage</small></div>
+        <div className="ops-metric"><span>Active orders</span><strong>{activeOrders}</strong><small>Being prepared or delivered</small></div>
+        <div className={`ops-metric ${stockAlerts ? 'metric-alert' : ''}`}><span>Out of stock</span><strong>{stockAlerts}</strong><small>Items needing a restock</small></div>
+      </div>
+      <div className="section-heading"><div><span className="eyebrow">LIVE OVERVIEW</span><h2>Store locations</h2></div><span className="live-indicator"><i /> Live updates</span></div>
       {loading && <Loading />}
       <ErrorBox message={error} />
       {stores?.length === 0 && <Empty>You don't manage any stores.</Empty>}
