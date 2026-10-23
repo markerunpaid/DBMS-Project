@@ -28,9 +28,19 @@ export default function PartnerProfile() {
   if (error) return <ErrorBox message={error} />
 
   return (
-    <div className="grid-2">
-      <section className="card">
-        <h1>{me.name}</h1>
+    <div className="partner-dashboard">
+      <section className="ops-hero partner-hero">
+        <div><span className="eyebrow">DELIVERY PARTNER</span><h1>Welcome back, {me.name.split(' ')[0]}.</h1><p>{me.storeName ? `You're connected to ${me.storeName}.` : 'Your delivery profile and shift controls.'}</p></div>
+        <div className="rider-art" aria-hidden="true"><span>🛵</span><i /><i /><i /></div>
+      </section>
+      <div className="ops-metrics partner-metrics">
+        <div className="ops-metric"><span>Active deliveries</span><strong>{me.activeDeliveries}</strong><small>Currently assigned to you</small></div>
+        <div className="ops-metric"><span>Completed</span><strong>{me.completedDeliveries}</strong><small>Successful handoffs</small></div>
+        <div className="ops-metric"><span>Shift status</span><strong className={`status-${me.status.toLowerCase()}`}>{me.status === 'AVAILABLE' ? 'Online' : me.status === 'BUSY' ? 'On route' : 'Offline'}</strong><small>Tap below to update</small></div>
+      </div>
+      <div className="grid-2">
+      <section className="card profile-card">
+        <div className="profile-heading"><span className="profile-avatar">{me.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><div><span className="eyebrow">YOUR PROFILE</span><h2>{me.name}</h2></div></div>
         <dl className="details">
           <dt>Email</dt><dd>{me.email}</dd>
           <dt>Phone</dt><dd>{me.phone}</dd>
@@ -40,7 +50,7 @@ export default function PartnerProfile() {
       </section>
 
       <section className="card">
-        <h2>Availability</h2>
+        <span className="eyebrow">SHIFT CONTROLS</span><h2>Availability</h2>
         <p className={`status-${me.status.toLowerCase()}`}>● {STATUS_TEXT[me.status]}</p>
         <div className="actions">
           <button className="btn btn-primary" disabled={me.status !== 'OFFLINE'} onClick={() => setStatus('AVAILABLE')}>Go online</button>
@@ -54,6 +64,7 @@ export default function PartnerProfile() {
         </div>
         <Link to="/partner/deliveries" className="btn">Open delivery list →</Link>
       </section>
+      </div>
     </div>
   )
 }

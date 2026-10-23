@@ -25,7 +25,7 @@ export default function NavBar() {
   return (
     <header className="nav no-print">
       <div className="nav-inner">
-        <span className="brand">⚡ QuickCart</span>
+        <span className="brand"><span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2.1 10.2a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 1.9-1.4L21 8H6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/></svg></span>QuickCart</span>
         {user && (
           <nav className="nav-links">
             {LINKS[user.role].map(([to, label]) => (
