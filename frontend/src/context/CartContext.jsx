@@ -18,10 +18,6 @@ function load(owner) {
   return { ...EMPTY, owner }
 }
 
-/**
- * The cart belongs to one user, one store and one delivery address -- an order is
- * fulfilled by a single dark store, so switching store starts a new cart.
- */
 export function CartProvider({ children }) {
   const { user } = useAuth()
   const owner = user ? `${user.role}:${user.id}` : null
@@ -44,7 +40,11 @@ export function CartProvider({ children }) {
       count: lines.reduce((n, l) => n + l.qty, 0),
       subtotal: lines.reduce((s, l) => s + l.qty * Number(l.product.price), 0),
 
-      /** Returns false (and changes nothing) if the cart holds another store's items. */
+      setAddressId(addressId) {
+        setCart((c) => ({ ...c, addressId }))
+      },
+
+      /** Legacy single-store starter; optional in multi-store mode. */
       startShopping(store, addressId, { force = false } = {}) {
         const sameStore = cart.store?.id === store.id
         if (!sameStore && lines.length > 0 && !force) return false
@@ -57,12 +57,20 @@ export function CartProvider({ children }) {
         return true
       },
 
-      setQty(product, qty) {
+      setQty(product, qty, addressId) {
         setCart((c) => {
           const items = { ...c.items }
-          if (qty <= 0) delete items[product.productId]
-          else items[product.productId] = { product, qty: Math.min(qty, product.available) }
-          return { ...c, items }
+          const maxAvail = product.totalAvailable ?? product.available ?? 999
+          if (qty <= 0) {
+            delete items[product.productId]
+          } else {
+            items[product.productId] = { product, qty: Math.min(qty, maxAvail) }
+          }
+          return {
+            ...c,
+            addressId: addressId || c.addressId,
+            items,
+          }
         })
       },
 
@@ -71,7 +79,7 @@ export function CartProvider({ children }) {
       },
 
       clear() {
-        setCart((c) => ({ ...EMPTY, owner: c.owner }))
+        setCart((c) => ({ ...EMPTY, owner: c.owner, addressId: c.addressId }))
       },
     }
   }, [cart])

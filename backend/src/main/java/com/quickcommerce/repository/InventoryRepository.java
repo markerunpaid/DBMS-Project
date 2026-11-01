@@ -15,6 +15,14 @@ public interface InventoryRepository extends JpaRepository<Inventory, Inventory.
     List<Inventory> findByIdDarkStoreIdAndQuantityGreaterThanOrderByProductCategoryNameAscProductNameAsc(
             Long darkStoreId, int quantity);
 
+    @Query("""
+            SELECT i FROM Inventory i
+             WHERE i.id.darkStoreId IN :storeIds
+               AND i.quantity > 0
+             ORDER BY i.product.category.name ASC, i.product.name ASC
+            """)
+    List<Inventory> findAvailableInStores(@Param("storeIds") List<Long> storeIds);
+
     /**
      * Takes stock only if enough is left, in a single statement, so two concurrent
      * orders can never oversell. Returns 0 when stock is insufficient (or not stocked).

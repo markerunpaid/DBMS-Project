@@ -88,16 +88,19 @@ MySQL Workbench.
 
 ### Demo logins (password `QuickCart@2026` for all)
 
-| Role | Email |
-|---|---|
-| Customer | `customer@qc.com` |
-| Admin | `admin@qc.com` (manages the Lanka and Sigra stores), `admin2@qc.com` (Sarnath) |
-| Delivery partner | `partner1@qc.com`, `partner2@qc.com` (Lanka), `partner3@qc.com` (Sigra) |
+| Role | Name | Email | Details / Assigned Store | Phone |
+|---|---|---|---|---|
+| **Customer** | Aarav Sharma | `customer@qc.com` | Primary demo customer (saved addresses in Varanasi) | `9000000001` |
+| **Admin** | Ravi Kumar | `admin@qc.com` | Manages Lanka Dark Store & Sigra Dark Store | `9200000001` |
+| **Admin** | Neha Singh | `admin2@qc.com` | Manages Sarnath Dark Store | `9200000002` |
+| **Delivery partner** | Amit Verma | `partner1@qc.com` | Lanka Dark Store | `9100000001` |
+| **Delivery partner** | Rahul Gupta | `partner2@qc.com` | Lanka Dark Store | `9100000002` |
+| **Delivery partner** | Vikram Chauhan | `partner3@qc.com` | Sigra Dark Store | `9100000003` |
 
 **Try the full flow:**
-1. As the customer, place an order at Lanka Dark Store.
+1. As the customer, place an order (single-store or split across multiple stores).
 2. As `admin@qc.com`, open Lanka → Orders → **Pack & assign** partner1.
-3. As `partner1@qc.com`, go to Deliveries and tap **Picked up**, then **Delivered**.
+3. As `partner1@qc.com` (Amit Verma) or `partner3@qc.com` (Vikram Chauhan), go to Deliveries and tap **Picked up**, then **Delivered**.
 
 The customer's order page shows the timer updating at each step.
 
@@ -106,7 +109,7 @@ The customer's order page shows the timer updating at each step.
 | Area | Endpoints |
 |---|---|
 | Auth | `POST /api/auth/register`, `POST /api/auth/login` `{role, email, password}` → JWT |
-| Customer | `GET/POST /api/customer/addresses`, `GET /api/customer/stores/nearest?addressId=`, `GET /api/customer/stores/{id}/items`, `GET /api/customer/coupons`, `POST/GET /api/customer/orders`, `GET /api/customer/orders/{id}`, `GET /api/customer/orders/{id}/receipt`, `POST /api/customer/orders/{id}/cancel` |
+| Customer | `GET/POST /api/customer/addresses`, `GET /api/customer/catalog?addressId=`, `POST /api/customer/orders/plan`, `POST /api/customer/orders/multi`, `GET /api/customer/stores/nearest?addressId=`, `GET /api/customer/stores/{id}/items`, `GET /api/customer/coupons`, `POST/GET /api/customer/orders`, `GET /api/customer/orders/{id}`, `GET /api/customer/orders/{id}/receipt`, `POST /api/customer/orders/{id}/cancel` |
 | Admin | `GET /api/admin/stores`, `GET /api/admin/stores/{id}/inventory`, `PUT /api/admin/stores/{id}/inventory/{productId}`, `POST /api/admin/stores/{id}/inventory`, `POST /api/admin/stores/{id}/products`, `DELETE /api/admin/stores/{id}/inventory/{productId}`, `GET /api/admin/products`, `GET /api/admin/categories`, `GET /api/admin/stores/{id}/orders`, `GET /api/admin/stores/{id}/partners`, `POST /api/admin/orders/{id}/pack` |
 | Partner | `GET /api/partner/me`, `PUT /api/partner/me/status`, `GET /api/partner/deliveries`, `POST /api/partner/deliveries/{id}/pickup`, `POST /api/partner/deliveries/{id}/deliver` |
 
