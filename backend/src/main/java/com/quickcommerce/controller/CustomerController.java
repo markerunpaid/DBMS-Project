@@ -1,9 +1,13 @@
 package com.quickcommerce.controller;
 
 import com.quickcommerce.dto.CustomerDtos.AddressDto;
+import com.quickcommerce.dto.CustomerDtos.CatalogProductDto;
 import com.quickcommerce.dto.CustomerDtos.CouponDto;
+import com.quickcommerce.dto.CustomerDtos.FulfillmentPlanDto;
+import com.quickcommerce.dto.CustomerDtos.MultiStorePlaceOrderRequest;
 import com.quickcommerce.dto.CustomerDtos.NearestStoreDto;
 import com.quickcommerce.dto.CustomerDtos.NewAddressRequest;
+import com.quickcommerce.dto.CustomerDtos.PlanOrderRequest;
 import com.quickcommerce.dto.CustomerDtos.StoreItemDto;
 import com.quickcommerce.dto.OrderDtos.OrderDto;
 import com.quickcommerce.dto.OrderDtos.PlaceOrderRequest;
@@ -46,6 +50,11 @@ public class CustomerController {
         return customers.nearestStores(me.id(), addressId);
     }
 
+    @GetMapping("/catalog")
+    public List<CatalogProductDto> catalog(@AuthenticationPrincipal AuthUser me, @RequestParam Long addressId) {
+        return customers.unifiedCatalog(me.id(), addressId);
+    }
+
     @GetMapping("/stores/{storeId}/items")
     public List<StoreItemDto> storeItems(@PathVariable Long storeId) {
         return customers.storeItems(storeId);
@@ -56,10 +65,21 @@ public class CustomerController {
         return customers.usableCoupons(me.id());
     }
 
+    @PostMapping("/orders/plan")
+    public FulfillmentPlanDto planOrder(@AuthenticationPrincipal AuthUser me, @Valid @RequestBody PlanOrderRequest req) {
+        return orders.buildPlan(me.id(), req);
+    }
+
     @PostMapping("/orders")
     @ResponseStatus(HttpStatus.CREATED)
     public OrderDto placeOrder(@AuthenticationPrincipal AuthUser me, @Valid @RequestBody PlaceOrderRequest req) {
         return orders.place(me.id(), req);
+    }
+
+    @PostMapping("/orders/multi")
+    @ResponseStatus(HttpStatus.CREATED)
+    public List<OrderDto> placeMulti(@AuthenticationPrincipal AuthUser me, @Valid @RequestBody MultiStorePlaceOrderRequest req) {
+        return orders.placeMulti(me.id(), req);
     }
 
     @GetMapping("/orders")

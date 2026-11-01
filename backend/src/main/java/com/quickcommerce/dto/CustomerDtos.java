@@ -1,9 +1,13 @@
 package com.quickcommerce.dto;
 
+import com.quickcommerce.dto.OrderDtos.OrderLine;
 import com.quickcommerce.entity.DiscountType;
+import com.quickcommerce.entity.PaymentMode;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -11,6 +15,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class CustomerDtos {
 
@@ -47,5 +52,39 @@ public final class CustomerDtos {
     }
 
     public record CouponDto(String code, DiscountType discountType, BigDecimal value, LocalDateTime validTo) {
+    }
+
+    public record StoreStockDto(
+            Long storeId, String storeName, int available, double distanceKm, int etaMinutes) {
+    }
+
+    public record CatalogProductDto(
+            Long productId, String name, String unit, BigDecimal price, LocalDate expiry,
+            Long categoryId, String categoryName, int totalAvailable, List<StoreStockDto> stores) {
+    }
+
+    public record OrderItemPreview(
+            Long productId, String name, String unit, int quantity, BigDecimal price, BigDecimal lineTotal) {
+    }
+
+    public record FulfillmentPlanPackage(
+            Long storeId, String storeName, String storeAddress, double distanceKm, int etaMinutes,
+            List<OrderItemPreview> items, BigDecimal subtotal) {
+    }
+
+    public record FulfillmentPlanDto(
+            List<FulfillmentPlanPackage> packages, BigDecimal subtotal, int totalItems, boolean isSplit) {
+    }
+
+    public record MultiStorePlaceOrderRequest(
+            @NotNull Long addressId,
+            @NotEmpty List<@Valid OrderLine> items,
+            String couponCode,
+            @NotNull PaymentMode paymentMode) {
+    }
+
+    public record PlanOrderRequest(
+            @NotNull Long addressId,
+            @NotEmpty List<@Valid OrderLine> items) {
     }
 }

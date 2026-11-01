@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, errorMessage } from '../../api/client.js'
-import { Empty, ErrorBox } from '../../components/Feedback.jsx'
+import { Empty, ErrorBox, Loading } from '../../components/Feedback.jsx'
 import { useCart } from '../../context/CartContext.jsx'
 import { couponDiscount, money, PAYMENT_MODES } from '../../utils/format.js'
 import { useApi } from '../../utils/useApi.js'
@@ -17,28 +17,80 @@ export default function Checkout() {
   const [error, setError] = useState(null)
   const [placing, setPlacing] = useState(false)
 
+  // Multi-store fulfillment plan
+  const [plan, setPlan] = useState(null)
+  const [planLoading, setPlanLoading] = useState(false)
+  const [planError, setPlanError] = useState(null)
+
+  // resolve current address
+  const currentAddressId = cart.cart.addressId || addresses?.find((a) => a.isDefault)?.addressId || addresses?.[0]?.addressId
+
+  useEffect(() => {
+    if (currentAddressId && currentAddressId !== cart.cart.addressId) {
+      cart.setAddressId(currentAddressId)
+    }
+  }, [currentAddressId, cart])
+
+  // fetch fulfillment plan whenever cart items or address changes
+  useEffect(() => {
+    if (!currentAddressId || cart.lines.length === 0) {
+      setPlan(null)
+      return
+    }
+
+    let active = true
+    setPlanLoading(true)
+    setPlanError(null)
+
+    api.post('/customer/orders/plan', {
+      addressId: currentAddressId,
+      items: cart.lines.map((l) => ({ productId: l.product.productId, quantity: l.qty })),
+    })
+      .then(({ data }) => {
+        if (active) {
+          setPlan(data)
+          setPlanLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setPlanError(errorMessage(err))
+          setPlanLoading(false)
+        }
+      })
+
+    return () => { active = false }
+  }, [currentAddressId, cart.lines])
+
   if (cart.lines.length === 0) {
     return <Empty>Your cart is empty. <Link to="/shop" className="btn btn-primary">Start shopping</Link></Empty>
   }
 
-  const address = addresses?.find((a) => a.addressId === cart.cart.addressId)
+  const address = addresses?.find((a) => a.addressId === currentAddressId)
   const coupon = coupons?.find((c) => c.code === couponCode)
   const discount = couponDiscount(coupon, cart.subtotal)
-  const total = cart.subtotal - discount
+  const total = Math.max(0, cart.subtotal - discount)
 
   async function placeOrder() {
+    if (!currentAddressId) {
+      setError('Please choose a delivery address')
+      return
+    }
     setPlacing(true)
     setError(null)
     try {
-      const { data: order } = await api.post('/customer/orders', {
-        storeId: cart.cart.store.id,
-        addressId: cart.cart.addressId,
+      const { data: placedOrders } = await api.post('/customer/orders/multi', {
+        addressId: currentAddressId,
         items: cart.lines.map((l) => ({ productId: l.product.productId, quantity: l.qty })),
         couponCode: couponCode || null,
         paymentMode,
       })
       cart.clear()
-      navigate(`/orders/${order.id}`)
+      if (placedOrders?.length === 1) {
+        navigate(`/orders/${placedOrders[0].id}`)
+      } else {
+        navigate('/orders')
+      }
     } catch (err) {
       setError(errorMessage(err))
       setPlacing(false)
@@ -49,31 +101,88 @@ export default function Checkout() {
     <div className="grid-2">
       <section>
         <h1>Checkout</h1>
-        <p className="muted">
-          From <strong>{cart.cart.store.name}</strong> ·{' '}
-          <Link to={`/shop/store/${cart.cart.store.id}`}>add more items</Link>
-        </p>
-        <div className="card">
-          <table className="table">
-            <tbody>
-              {cart.lines.map(({ product, qty }) => (
-                <tr key={product.productId}>
-                  <td>
-                    <strong>{product.name}</strong>
-                    <div className="muted small">{product.unit} · {money(product.price)}</div>
-                  </td>
-                  <td><QtyStepper product={product} qty={qty} onChange={(q) => cart.setQty(product, q)} /></td>
-                  <td className="num">{money(qty * Number(product.price))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+        {planLoading && <Loading text="Calculating optimal dark store fulfillment…" />}
+        <ErrorBox message={planError} />
+
+        {plan?.isSplit && (
+          <div className="alert alert-warn" style={{ marginBottom: '1rem' }}>
+            <strong>⚡ Multi-Store Split Fulfillment</strong>
+            <p className="small" style={{ margin: '0.3rem 0 0' }}>
+              Your items are split across <strong>{plan.packages.length} dark stores</strong> to fulfill your full order.
+              Each package will be dispatched with its own delivery partner and live timer!
+            </p>
+          </div>
+        )}
+
+        {/* Fulfillment Packages */}
+        {plan?.packages?.map((pkg, idx) => (
+          <div key={pkg.storeId} className="card" style={{ marginBottom: '1.25rem' }}>
+            <div className="row-between" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '0.6rem', marginBottom: '0.6rem' }}>
+              <div>
+                <strong>Package {idx + 1}: {pkg.storeName}</strong>
+                <div className="muted small">{pkg.distanceKm} km away · ETA ~{pkg.etaMinutes} min</div>
+              </div>
+              <span className="badge badge-open">ETA {pkg.etaMinutes} min</span>
+            </div>
+            <table className="table">
+              <tbody>
+                {pkg.items.map((item) => {
+                  const lineProduct = cart.lines.find((l) => l.product.productId === item.productId)?.product || {
+                    productId: item.productId,
+                    name: item.name,
+                    unit: item.unit,
+                    price: item.price,
+                  }
+                  return (
+                    <tr key={item.productId}>
+                      <td>
+                        <strong>{item.name}</strong>
+                        <div className="muted small">{item.unit} · {money(item.price)}</div>
+                      </td>
+                      <td>
+                        <QtyStepper
+                          product={lineProduct}
+                          qty={cart.qtyOf(item.productId)}
+                          onChange={(q) => cart.setQty(lineProduct, q, currentAddressId)}
+                        />
+                      </td>
+                      <td className="num">{money(item.lineTotal)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="row-between" style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--line)' }}>
+              <span className="muted small">Package subtotal</span>
+              <strong>{money(pkg.subtotal)}</strong>
+            </div>
+          </div>
+        ))}
+
+        {!plan && !planLoading && (
+          <div className="card">
+            <table className="table">
+              <tbody>
+                {cart.lines.map(({ product, qty }) => (
+                  <tr key={product.productId}>
+                    <td>
+                      <strong>{product.name}</strong>
+                      <div className="muted small">{product.unit} · {money(product.price)}</div>
+                    </td>
+                    <td><QtyStepper product={product} qty={qty} onChange={(q) => cart.setQty(product, q, currentAddressId)} /></td>
+                    <td className="num">{money(qty * Number(product.price))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <h3>Deliver to</h3>
         <div className="card">
           {address ? <p><strong>{address.label}</strong> — {address.formatted}</p> : <p className="muted">Loading address…</p>}
-          <Link to="/shop" className="small">Change address or store</Link>
+          <Link to="/shop" className="small">Change address</Link>
         </div>
       </section>
 
@@ -108,7 +217,11 @@ export default function Checkout() {
         </dl>
 
         <ErrorBox message={error} />
-        <button className="btn btn-primary btn-block" onClick={placeOrder} disabled={placing}>
+        <button
+          className="btn btn-primary btn-block"
+          onClick={placeOrder}
+          disabled={placing || planLoading || !!planError}
+        >
           {placing ? 'Placing order…' : `Place order · ${money(total)}`}
         </button>
       </section>

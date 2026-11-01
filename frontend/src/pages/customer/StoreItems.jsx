@@ -108,7 +108,7 @@ export default function StoreItems() {
   )
 }
 
-function productEmoji(category = '', name = '') {
+export function productEmoji(category = '', name = '') {
   const text = `${category} ${name}`.toLowerCase()
   if (/fruit|apple|banana|orange|mango|berry|grape/.test(text)) return '🍎'
   if (/vegetable|veggie|tomato|potato|onion|spinach/.test(text)) return '🥑'

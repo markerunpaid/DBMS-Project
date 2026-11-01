@@ -1,14 +1,18 @@
 package com.quickcommerce.service;
 
 import com.quickcommerce.dto.CustomerDtos.AddressDto;
+import com.quickcommerce.dto.CustomerDtos.CatalogProductDto;
 import com.quickcommerce.dto.CustomerDtos.CouponDto;
 import com.quickcommerce.dto.CustomerDtos.NearestStoreDto;
 import com.quickcommerce.dto.CustomerDtos.NewAddressRequest;
 import com.quickcommerce.dto.CustomerDtos.StoreItemDto;
+import com.quickcommerce.dto.CustomerDtos.StoreStockDto;
 import com.quickcommerce.entity.Address;
 import com.quickcommerce.entity.CustomerAddress;
 import com.quickcommerce.entity.DarkStore;
+import com.quickcommerce.entity.Inventory;
 import com.quickcommerce.entity.Pincode;
+import com.quickcommerce.entity.Product;
 import com.quickcommerce.exception.ApiException;
 import com.quickcommerce.repository.AddressRepository;
 import com.quickcommerce.repository.CustomerAddressRepository;
@@ -21,7 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -97,7 +103,7 @@ public class CustomerService {
     }
 
     /** The customer's saved address, or 404 -- never someone else's. */
-    CustomerAddress requireOwnAddress(Long customerId, Long addressId) {
+    public CustomerAddress requireOwnAddress(Long customerId, Long addressId) {
         return customerAddresses.findById(new CustomerAddress.Key(customerId, addressId))
                 .orElseThrow(() -> ApiException.notFound("Address not found in your saved addresses"));
     }
@@ -124,6 +130,13 @@ public class CustomerService {
     }
 
     @Transactional(readOnly = true)
+    public List<NearestStoreDto> getDeliverableStores(Long customerId, Long addressId) {
+        return nearestStores(customerId, addressId).stream()
+                .filter(s -> s.openNow() && s.deliverable())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<StoreItemDto> storeItems(Long storeId) {
         if (!stores.existsById(storeId)) {
             throw ApiException.notFound("Store not found");
@@ -136,6 +149,47 @@ public class CustomerService {
                             p.getCategory().getId(), p.getCategory().getName(), inv.getQuantity());
                 })
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CatalogProductDto> unifiedCatalog(Long customerId, Long addressId) {
+        List<NearestStoreDto> openStores = getDeliverableStores(customerId, addressId);
+        if (openStores.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, NearestStoreDto> storeMap = openStores.stream()
+                .collect(Collectors.toMap(NearestStoreDto::id, Function.identity()));
+        List<Long> storeIds = openStores.stream().map(NearestStoreDto::id).toList();
+
+        List<Inventory> rows = inventory.findAvailableInStores(storeIds);
+
+        Map<Product, List<Inventory>> byProduct = rows.stream()
+                .collect(Collectors.groupingBy(Inventory::getProduct, LinkedHashMap::new, Collectors.toList()));
+
+        List<CatalogProductDto> result = new ArrayList<>();
+        for (var entry : byProduct.entrySet()) {
+            Product p = entry.getKey();
+            List<Inventory> invs = entry.getValue();
+
+            int totalAvailable = 0;
+            List<StoreStockDto> stockList = new ArrayList<>();
+            for (Inventory inv : invs) {
+                Long sId = inv.getId().getDarkStoreId();
+                NearestStoreDto sInfo = storeMap.get(sId);
+                if (sInfo != null && inv.getQuantity() > 0) {
+                    totalAvailable += inv.getQuantity();
+                    stockList.add(new StoreStockDto(
+                            sId, sInfo.name(), inv.getQuantity(), sInfo.distanceKm(), sInfo.etaMinutes()));
+                }
+            }
+
+            if (totalAvailable > 0) {
+                result.add(new CatalogProductDto(
+                        p.getId(), p.getName(), p.getUnit(), p.getPrice(), p.getExpiry(),
+                        p.getCategory().getId(), p.getCategory().getName(), totalAvailable, stockList));
+            }
+        }
+        return result;
     }
 
     // ---------- coupons ----------
